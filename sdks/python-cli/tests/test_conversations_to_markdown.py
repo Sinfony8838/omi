@@ -92,6 +92,63 @@ class TestConversationsToMarkdown(unittest.TestCase):
             self.assertEqual(exported[0], target_file)
             self.assertIn("Updated replacement note", target_file.read_text(encoding="utf-8"))
 
+    def test_three_colliding_conversations_are_preserved_in_both_modes(self):
+        conversations = [
+            {
+                "id": f"12345678-{index}",
+                "started_at": "2026-09-17T10:00:00Z",
+                "structured": {"title": "Meeting", "overview": f"Distinct meeting {index}"},
+            }
+            for index in range(3)
+        ]
+        names = [
+            "2026-09-17_meeting_12345678.md",
+            "2026-09-17_meeting_12345678_2.md",
+            "2026-09-17_meeting_12345678_3.md",
+        ]
+
+        for overwrite in (False, True):
+            with self.subTest(overwrite=overwrite), tempfile.TemporaryDirectory() as tmp_dir:
+                out_dir = Path(tmp_dir)
+                exported = c2m.export_conversations(conversations, output_dir=out_dir, overwrite=overwrite)
+
+                self.assertEqual(exported, [out_dir / name for name in names])
+                self.assertEqual(set(out_dir.iterdir()), set(exported))
+                for path, conversation in zip(exported, conversations):
+                    self.assertEqual(path.read_text(encoding="utf-8"), c2m.conversation_to_markdown(conversation))
+
+    def test_repeated_overwrite_replaces_existing_collision_files_without_adding_paths(self):
+        conversations = [
+            {
+                "id": f"12345678-{index}",
+                "started_at": "2026-09-17T10:00:00Z",
+                "structured": {"title": "Meeting", "overview": f"Updated meeting {index}"},
+            }
+            for index in range(3)
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir)
+            expected = [
+                out_dir / "2026-09-17_meeting_12345678.md",
+                out_dir / "2026-09-17_meeting_12345678_2.md",
+                out_dir / "2026-09-17_meeting_12345678_3.md",
+            ]
+            for path in expected:
+                path.write_text("Obsolete note", encoding="utf-8")
+            unrelated = out_dir / "unrelated.md"
+            unrelated.write_text("Keep this note", encoding="utf-8")
+
+            for run in range(2):
+                with self.subTest(run=run):
+                    exported = c2m.export_conversations(conversations, output_dir=out_dir, overwrite=True)
+
+                    self.assertEqual(exported, expected)
+                    self.assertEqual(set(out_dir.iterdir()), set(expected) | {unrelated})
+                    self.assertEqual(unrelated.read_text(encoding="utf-8"), "Keep this note")
+                    for path, conversation in zip(exported, conversations):
+                        self.assertEqual(path.read_text(encoding="utf-8"), c2m.conversation_to_markdown(conversation))
+
     def test_slugify_and_undated_fallback(self):
         conv = {
             "id": "abc-123",
