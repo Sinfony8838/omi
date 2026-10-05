@@ -206,11 +206,11 @@ def export_conversations(
         base_name = f"{date_prefix}_{slug}_{short_id}"
         filepath = output_dir / f"{base_name}.md"
 
-        if not overwrite:
-            counter = 1
-            while filepath in used_paths or filepath.exists():
-                counter += 1
-                filepath = output_dir / f"{base_name}_{counter}.md"
+        # Overwrite may replace earlier exports, never another note in this batch.
+        counter = 1
+        while filepath in used_paths or (not overwrite and filepath.exists()):
+            counter += 1
+            filepath = output_dir / f"{base_name}_{counter}.md"
 
         used_paths.add(filepath)
 
@@ -266,7 +266,7 @@ def main() -> None:
         "--overwrite",
         action="store_true",
         default=False,
-        help="Overwrite existing markdown files if filenames collide (default: False).",
+        help="Overwrite pre-existing markdown files; keep conversations in this export distinct (default: False).",
     )
     args = parser.parse_args()
 
